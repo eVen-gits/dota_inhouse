@@ -1,4 +1,5 @@
 from os import environ as environment
+import time
 
 from dota2.util import replay_url_from_match
 from steam.enums import EResult
@@ -9,85 +10,94 @@ from dota2 import Dota2Client
 
 import logging
 
-logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
+
+cl_steam = SteamClient()
+cl_dota2 = Dota2Client(cl_steam)
 
 
-steam_client = SteamClient()
-dota2_client = Dota2Client(steam_client)
-
-# api_usage_path = Path('../data/api.json')
-# if api_usage_path.is_file():
-#     with open(api_usage_path, 'r') as file:
-#         api_usage = load(file)
-
-WEB_API_LIMIT = 100000
-# Unkown if it is this low, reported by dota2 docs.
-GC_API_LIMIT = 100
-
-
-def gc_login():
-    user = environment['STEAM_BOT_USER']
-    password = environment['STEAM_BOT_PASS']
-
-    status = steam_client.cli_login(user, password)
-
-    if status != EResult.OK:
-        print('Login failed returning: ', status)
-    else:
-        print('Login successful!')
-
-
-class SingleDotaClient(object):
+class DotaBot:
     __instance = None
 
-    def __new__(cls, token):
-        if SingleDotaClient.__instance is None:
-            SingleDotaClient.__instance = object.__new__(cls)
+    @staticmethod
+    def instance():
+        """ Static access method. """
+        if DotaBot.__instance == None:
+            DotaBot()
+        return DotaBot.__instance
 
-            SingleDotaClient.__instance.token = token
-            SingleDotaClient.__instance.dota2_client = dota2_client
-            SingleDotaClient.__instance.steam_client = steam_client
-            SingleDotaClient.__instance.dota2_ready = False
-            gc_login()
+    def __init__(self):
+        if DotaBot.__instance != None:
+            raise Exception("This class is a singleton!")
+        else:
+            DotaBot.__instance = self
+        self.dota = cl_dota2
+        self.steam = cl_steam
 
-        return SingleDotaClient.__instance
+    def _login(self):
+        user = environment['STEAM_BOT_USER']
+        password = environment['STEAM_BOT_PASS']
 
-    @steam_client.on('logged_on')
-    def __start_dota():
-        print('Launching dota 2 game controller.')
-        SingleDotaClient.__instance.dota2_client.launch()
-        SingleDotaClient.__instance.dota2_client.emit('dota2_ready')
-        SingleDotaClient.__instance.steam_client.wait_event('finished')
+        status = cl_steam.cli_login(username=user, password=password)
 
-    @dota2_client.on('ready')
-    def __dota_ready():
-        SingleDotaClient.__instance.dota2_ready = True
+        if status != EResult.OK:
+            print('Login failed returning: ', status)
+        else:
+            print('Login successful!')
+        return status
+
+    @cl_dota2.on('ready')
+    def dota_ready():
         print('Dota ready!')
+        DotaBot.instance().dota2_ready = True
+        cl_steam.games_played ([cl_dota2.app_id])
 
-    @dota2_client.on("match_details")
-    def emit_replay_id(replay_id, eresult, replay):
-        url = replay_url_from_match(replay)
-        SingleDotaClient.__instance.dota2_client.emit("replay_url", replay_id, url)
+    @cl_dota2.on('party_invite')
+    def accept_party_invite(message):
+        print(message)
+        DotaBot.instance().dota.respond_to_party_invite(message.group_id, accept=True)
 
-    @steam_client.on("chat_message")
+    @cl_steam.on("chat_message")
     def print_message(steam_user, msg):
-        print(msg)
-        SingleDotaClient.__instance.close()
+        print(steam_user.name, msg)
+        if msg == 'quit':
+            DotaBot.instance()._cleanup_clients()
+        elif msg == 'host':
+            DotaBot.instance().dota.create_practice_lobby(password='')
+        elif msg == 'party':
+            DotaBot.instance().dota.invite_to_party(steam_user.steam_id)
+        elif msg == 'lobby':
+            DotaBot.instance().dota.invite_to_lobby(steam_user.steam_id)
 
-    def close(cls):
-        SingleDotaClient.__instance.steam_client.emit('finished')
-        SingleDotaClient.__instance.dota2_ready = False
-        SingleDotaClient.__instance.dota2_client.exit()
-        SingleDotaClient.__instance.steam_client.disconnect()
+    def _init_clients(self):
+        logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
 
-    def dota_wait(cls, *args, **kwargs):
-        return SingleDotaClient.__instance.dota2_client\
-                               .wait_event(*args, **kwargs)
 
-    def steam_wait(cls, *args, **kwargs):
-        return SingleDotaClient.__instance.steam_client\
-                               .wait_event(*args, **kwargs)
+        while not cl_steam.connected:
+            if not cl_steam.reconnect(maxdelay=1, retry=0):
+                print('Failed to connect, reattempting...')
+
+        self._login()
+        self._launch_dota()
+
+    def _launch_dota(self):
+        self.dota.launch()
+        self.dota.wait_event('ready')
+
+    def _cleanup_clients(self):
+        cl_dota2.exit()
+        cl_steam.emit('finished')
+        cl_steam.logout()
+        cl_steam.disconnect()
+
+    def __enter__(self):
+        self._init_clients()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._cleanup_clients()
 
 if __name__ == '__main__':
-    my_client = SingleDotaClient('token')
-    my_client.steam_wait('chat_message')
+    with DotaBot() as bot:
+        bot.steam.run_forever()
+    #my_client.steam_wait('chat_message')
+    #my_client.steam_client.run_forever()
