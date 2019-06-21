@@ -1,2 +1,2 @@
-fairplaybot_sentry.bin
-cm_servers.json
+steam_credentials/*.bin
+__pycache__/*
