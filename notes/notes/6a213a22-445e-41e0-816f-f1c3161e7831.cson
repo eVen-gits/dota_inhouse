@@ -1,0 +1,49 @@
+createdAt: "2019-06-18T18:12:27.067Z"
+updatedAt: "2019-06-21T18:43:42.554Z"
+type: "MARKDOWN_NOTE"
+folder: "6ee4d0c130f711a0a449"
+title: "Better Dota matchmaking platform by me"
+tags: []
+content: '''
+  # Better Dota matchmaking platform by me
+  
+  ## Features
+  
+  - [ ] Solo queue
+  - [ ] Team queue
+  - [ ] Recruitment
+  - [ ] Coaching
+  
+  ## Discord bot
+  
+  - [x] Basic example
+  - [ ] Channels setup
+  - [ ] Teams
+  ## Ingame bot
+  
+  - [x] Basic example
+  - [x] Host game
+  - [x] Host MULTIPLE games
+  - [ ] Get game results
+  
+  ## Matchmaking details
+  
+  ## Database
+  
+  - [ ] User accounts
+    - ID
+    - Nick
+    - Steam ID
+    - Discord ID
+  - [ ] Teams
+  - [ ] Match log
+  
+  ## Server
+  
+  ## Rules
+'''
+linesHighlighted: [
+  13
+]
+isStarred: false
+isTrashed: false

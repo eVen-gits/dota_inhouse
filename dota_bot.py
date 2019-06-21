@@ -1,6 +1,7 @@
 import os
 import time
 import random
+from __init__ import *
 
 from dota2.util import replay_url_from_match
 from steam.enums import EResult
@@ -10,110 +11,123 @@ from steam import *
 from dota2 import Dota2Client
 
 import logging
+#logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
 
+class DotaBotInstance:
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
 
-cl_steam = SteamClient()
-cl_dota2 = Dota2Client(cl_steam)
+        self.steam = SteamClient()
+        self.dota = Dota2Client(self.steam)
 
+        self.steam.on('logged_on', self.on_logged_on)
+        self.dota.on('ready', self.on_dota_ready)
 
-class DotaBot:
-    __instance = None
-
-    @staticmethod
-    def instance():
-        """ Static access method. """
-        if DotaBot.__instance == None:
-            DotaBot()
-        return DotaBot.__instance
-
-    def __init__(self):
-        if DotaBot.__instance != None:
-            raise Exception("This class is a singleton!")
-        else:
-            DotaBot.__instance = self
-        self.dota = cl_dota2
-        self.steam = cl_steam
+        self._login()
 
     def _login(self):
-        user = os.environ['STEAM_BOT_USER']
-        password = os.environ['STEAM_BOT_PASS']
+        #self.username = os.environ['STEAM_BOT_USER']
+        #self.password = os.environ['STEAM_BOT_PASS']
 
-        if cl_steam.credential_location is None:
-            cl_steam.set_credential_location(os.path.dirname(os.path.realpath(__file__)))
-        cl_steam.get_sentry(user)
-        status = cl_steam.login(user, password=password)
-        cl_steam.store_sentry(user, cl_steam.get_sentry(user))
+        if self.steam.credential_location is None:
+            self.steam.set_credential_location(STEAM_CREDENTIAL_STORAGE)
+        status = self.steam.login(self.username, password=self.password)
+
+        sentry = self.steam.get_sentry(self.username)
+        if sentry:
+            self.steam.store_sentry(self.username, self.steam.get_sentry(self.username))
+        #self.user = client.user.SteamUser(steam_id, steam)
 
         if status != EResult.OK:
-            print('Login failed returning: ', status)
-        else:
-            print('Login successful!')
+            print('{}: Login failed returning: {}'.format(self.username, status))
+
         return status
 
-    @cl_dota2.on('ready')
-    def dota_ready():
+    def on_logged_on(self):
+        print('{}: Login successful!'.format(self.username))
+        self.dota.launch()
+
+    def on_dota_ready(self):
         print('Dota ready!')
-        DotaBot.instance().dota2_ready = True
-        cl_steam.games_played([cl_dota2.app_id])
+        if self.dota.lobby:
+            self.dota.leave_practice_lobby()
+            self.dota.wait_event('lobby_removed')
 
-        #TODO: Rich presence
-        #cl_steam.change_status(
-        #    persona_state_flags=
-        #        enums.common.EPersonaStateFlag.HasRichPresence | enums.common.EPersonaStateFlag.Online
-        #)
-        #print(DotaBot.instance().steam.user.rich_presence)
+        #Register callbacks
+        self.dota.on('lobby_new', self.on_lobby_new)
+        self.dota.on('lobby_changed', self.on_lobby_change)
 
-    @cl_steam.on('logged_on')
-    def _launch_dota():
-        DotaBot.instance().dota.launch()
-        DotaBot.instance().dota.wait_event('ready')
+        self.steam.on('chat_message', self.handle_commands)
 
-    @cl_dota2.on('party_invite')
-    def accept_party_invite(message):
-        print(message)
-        DotaBot.instance().dota.respond_to_party_invite(message.group_id, accept=True)
+        self.create_lobby()
 
-    @cl_steam.on("chat_message")
-    def print_message(steam_user, msg):
+    def on_lobby_new(self, CSODOTALobby):
+        #print(CSODOTALobby)
+        #self.invite_me_to_party()
+        self.invite_me_to_lobby()
+
+    def on_lobby_change(self, CSODOTALobby):
+        print(CSODOTALobby)
+
+    def invite_me_to_lobby(self):
+        print('Invite {} to lobby'.format(MY_STEAM_ID))
+        self.dota.invite_to_lobby(MY_STEAM_ID)
+
+    def invite_me_to_party(self):
+        if self.dota.lobby:
+            print('Invite {} to party'.format(MY_STEAM_ID))
+            self.dota.invite_to_party(MY_STEAM_ID)
+
+    def handle_commands(self, steam_user, msg):
         print(steam_user.name, msg)
         if msg == 'quit':
             DotaBot.instance()._cleanup_clients()
         if msg == 'host':
-            DotaBot.instance().dota.create_practice_lobby(password='{:3d}'.format(random.randint(0, 999)))
+            self.dota.create_practice_lobby(password='{:3d}'.format(random.randint(0, 999)))
         if msg == 'leavelobby':
-            DotaBot.instance().dota.leave_practice_lobby()
+            self.dota.leave_practice_lobby()
         if msg == 'party':
-            DotaBot.instance().dota.invite_to_party(steam_user.steam_id)
+            self.dota.invite_to_party(steam_user.steam_id)
         if msg == 'lobby':
-            DotaBot.instance().dota.invite_to_lobby(steam_user.steam_id)
+            self.dota.invite_to_lobby(steam_user.steam_id)
         if msg == 'status':
-            print(DotaBot.instance().dota.connection_status)
-        return
+            print(self.dota.connection_status)
 
-    def _init_clients(self):
-        #logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
-        cl_dota2.verbose_debug = True
+    def create_lobby(self):
+        password = '{:3d}'.format(random.randint(0, 999))
 
-        self._login()
-        #self._launch_dota()
+        options = dict({
+            'game_name':'{}'.format(self.steam.user.name)
+        })
 
-    def _cleanup_clients(self):
-        cl_dota2.exit()
-        cl_steam.emit('finished')
-        cl_steam.logout()
-        cl_steam.disconnect()
-        quit()
+        self.dota.create_practice_lobby(password=password, options=options)
 
-    def __enter__(self):
-        self._init_clients()
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._cleanup_clients()
+        self.dota.wait_event('lobby_new')
+        #self.dota.config_practice_lobby(options)
+        print('Lobby: {} | {}'.format(self.dota.lobby.game_name, password))
 
 if __name__ == '__main__':
-    with DotaBot() as bot:
-        bot.steam.run_forever()
-        print('Hello')
-    #my_client.steam_wait('chat_message')
-    #my_client.steam_client.run_forever()
+    passwd = os.environ['STEAM_BOT_PASS']
+
+    unames = ['fairplaybot', 'fairplaybot2']
+    bots = [DotaBotInstance(uname, passwd) for uname in unames]
+
+    while True:
+        for bot in bots:
+            bot.steam.idle()
+
+    #bot1 = DotaBotInstance('fairplaybot', passwd)
+    #bot1.steam.run_forever()
+
+    #user_input = input('>')
+    #while user_input:
+    #    print(user_input)
+    #    user_input = input('>')
+    #bot2 = DotaBotInstance('fairplaybot1', passwd)
+    #bot1 = DotaBotInstance('fairbot1', passwd)
+
+    #bots = [DotaBotInstance(name) for name in ['FairBot1', 'FairBot2', 'FairBot3']]
+    #for bot in bots:
+    #    bot.create_lobby()
+    #bots[0].cl.steam.run_forever()
