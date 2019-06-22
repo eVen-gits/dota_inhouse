@@ -3,6 +3,9 @@ from os import path
 
 from steam import SteamID
 
+#import gevent.monkey
+#gevent.monkey.patch_all()
+
 try:
     MY_STEAM_ID = SteamID(int(env['MY_STEAM_ID']))
 except Exception:

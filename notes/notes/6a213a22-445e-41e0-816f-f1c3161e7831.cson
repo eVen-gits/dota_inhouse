@@ -1,5 +1,5 @@
 createdAt: "2019-06-18T18:12:27.067Z"
-updatedAt: "2019-06-21T18:43:42.554Z"
+updatedAt: "2019-06-22T13:06:14.581Z"
 type: "MARKDOWN_NOTE"
 folder: "6ee4d0c130f711a0a449"
 title: "Better Dota matchmaking platform by me"
@@ -9,41 +9,70 @@ content: '''
   
   ## Features
   
+  ### Initial release
+  - [ ] 1v1 (Challenge)
   - [ ] Solo queue
+  - [ ] Donations
+  - [ ] Leaderboards
+  - [ ] Registration
+    - [ ] Pull badge - assign ELO
+    - [ ] Validation (smurfs)
+  
+  ### Soon<sup>TM</sup>
   - [ ] Team queue
   - [ ] Recruitment
   - [ ] Coaching
+  
+  <HR>
   
   ## Discord bot
   
   - [x] Basic example
   - [ ] Channels setup
-  - [ ] Teams
+  - [ ] Invite to channel/premission
+  
+  <HR>
+  
   ## Ingame bot
   
   - [x] Basic example
   - [x] Host game
   - [x] Host MULTIPLE games
   - [ ] Get game results
+  - [ ] Cluster manager
+  - [ ] Lobby configs
+  
+  <HR>
   
   ## Matchmaking details
   
+  - [ ] Regions
+    - [ ] Lock?
+  
+  <HR>
   ## Database
   
+  ### Release
   - [ ] User accounts
     - ID
-    - Nick
     - Steam ID
     - Discord ID
-  - [ ] Teams
-  - [ ] Match log
   
+  - [ ] Match log
+  - [ ] Leaderboards
+  
+  ### Soon
+  - [ ] Teams
+  
+  <HR>
   ## Server
   
   ## Rules
 '''
 linesHighlighted: [
-  13
+  18
+  17
 ]
 isStarred: false
 isTrashed: false
+isPinned: true

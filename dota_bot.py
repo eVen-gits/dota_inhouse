@@ -1,3 +1,6 @@
+import gevent.monkey
+gevent.monkey.patch_all()
+
 import os
 import time
 import random
@@ -10,11 +13,58 @@ from steam.enums import EResult
 from steam import *
 from dota2 import Dota2Client
 
+from utils.utils import *
+
+from tqdm import tqdm
+
 import logging
 #logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
 
+class BotCredentials:
+    def __init__(self, uname, passwd):
+        self.uname = uname
+        self.passwd = passwd
+
+    @staticmethod
+    @with_db
+    def fetch_all(conn=None, cursor=None):
+        sql = (
+            'SELECT username, pass '
+            'FROM dbase.bot '
+        )
+        cursor.execute(sql)
+        results = cursor.fetchall()
+        if not results:
+            raise KeyError('No bot credentials stored in the database.')
+        return [BotCredentials(uname, pwd) for uname, pwd in results]
+
+class DotaBotCluster:
+    def __init__(self):
+        self.bots = []
+        self._init_bots()
+
+    def _init_bots(self):
+        bot_credentials = BotCredentials.fetch_all()
+        print('Launching bots...')
+        self.bots = [
+            DotaBotInstance(cred.uname, cred.passwd)
+            for cred in
+            tqdm(bot_credentials)
+        ]
+
+    def idle(self):
+        for bot in self.bots:
+            bot.idle()
+
+    def run_forever(self, freq=0.1):
+        if len(self.bots) < 1:
+            return
+        while True:
+            self.idle()
+            time.sleep(freq)
+
 class DotaBotInstance:
-    def __init__(self, username, password):
+    def __init__(self, username, password, wait_dota=True):
         self.username = username
         self.password = password
 
@@ -24,9 +74,15 @@ class DotaBotInstance:
         self.steam.on('logged_on', self.on_logged_on)
         self.dota.on('ready', self.on_dota_ready)
 
-        self._login()
+        self._login(wait_dota)
 
-    def _login(self):
+    @property
+    def name(self):
+        if not self.steam.logged_on:
+            return 'None'
+        return self.steam.user.name
+
+    def _login(self, wait_dota=True):
         #self.username = os.environ['STEAM_BOT_USER']
         #self.password = os.environ['STEAM_BOT_PASS']
 
@@ -41,15 +97,20 @@ class DotaBotInstance:
 
         if status != EResult.OK:
             print('{}: Login failed returning: {}'.format(self.username, status))
-
+            return status
+        if wait_dota:
+            self.dota.wait_event('ready')
         return status
 
+    def idle(self):
+        self.steam.idle()
+
     def on_logged_on(self):
-        print('{}: Login successful!'.format(self.username))
+        #print('{}: Login successful!'.format(self.username))
         self.dota.launch()
 
     def on_dota_ready(self):
-        print('Dota ready!')
+        #print('Dota ready!')wait_dota
         if self.dota.lobby:
             self.dota.leave_practice_lobby()
             self.dota.wait_event('lobby_removed')
@@ -60,15 +121,14 @@ class DotaBotInstance:
 
         self.steam.on('chat_message', self.handle_commands)
 
-        self.create_lobby()
-
     def on_lobby_new(self, CSODOTALobby):
         #print(CSODOTALobby)
         #self.invite_me_to_party()
-        self.invite_me_to_lobby()
+        #self.invite_me_to_lobby()
+        self.dota.join_practice_lobby_broadcast_channel()
 
     def on_lobby_change(self, CSODOTALobby):
-        print(CSODOTALobby)
+        print(self.name)
 
     def invite_me_to_lobby(self):
         print('Invite {} to lobby'.format(MY_STEAM_ID))
@@ -108,26 +168,5 @@ class DotaBotInstance:
         print('Lobby: {} | {}'.format(self.dota.lobby.game_name, password))
 
 if __name__ == '__main__':
-    passwd = os.environ['STEAM_BOT_PASS']
-
-    unames = ['fairplaybot', 'fairplaybot2']
-    bots = [DotaBotInstance(uname, passwd) for uname in unames]
-
-    while True:
-        for bot in bots:
-            bot.steam.idle()
-
-    #bot1 = DotaBotInstance('fairplaybot', passwd)
-    #bot1.steam.run_forever()
-
-    #user_input = input('>')
-    #while user_input:
-    #    print(user_input)
-    #    user_input = input('>')
-    #bot2 = DotaBotInstance('fairplaybot1', passwd)
-    #bot1 = DotaBotInstance('fairbot1', passwd)
-
-    #bots = [DotaBotInstance(name) for name in ['FairBot1', 'FairBot2', 'FairBot3']]
-    #for bot in bots:
-    #    bot.create_lobby()
-    #bots[0].cl.steam.run_forever()
+    cluster = DotaBotCluster()
+    cluster.run_forever()
