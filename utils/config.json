@@ -5,5 +5,13 @@
         "username":"postgres",
         "password":"",
         "database":"fairplay"
+    },
+    "discord":{
+        "bot_token":"",
+        "bot_id":"",
+        "bot_secret":"",
+        "channels":{
+            "welcome":591581914528481283
+        }
     }
 }

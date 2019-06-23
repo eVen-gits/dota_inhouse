@@ -1,67 +1,78 @@
 import os
+import inspect
+import re
 
-import discord
-from discord.ext import commands
-import random
+from utils.config import data as cfg
 
-description = '''An example bot to showcase the discord.ext.commands extension
-module.
+from steam import SteamID
+from steam.client.builtins import User as SteamUser
 
-There are a number of utility commands being showcased here.'''
-bot = commands.Bot(command_prefix='!', description=description)
+#from discord import *
+from discord.ext.commands.bot import *
+from discord.ext.commands.core import *
+#import discord
+import asyncio
 
-@bot.event
-async def on_ready():
-    print('Logged in as')
-    print(bot.user.name)
-    print(bot.user.id)
-    print('------')
+class MyCog(Cog):
+    def __init__(self, bot: Bot):
+        self.bot = bot
 
-@bot.command()
-async def add(ctx, left: int, right: int):
-    """Adds two numbers together."""
-    await ctx.send(left + right)
+    #discord.ext.commands.dm_only()
+    @command(
+        name='signup',
+        help='Signup with !signup <your_steam_id> <your_email>'
+    )
+    async def signup(self, ctx, steam_id:int, email:str):
+        if not MyCog.valid_email(email):
+            raise Exception('Invalid email!')
 
-@bot.command()
-async def roll(ctx, dice: str):
-    """Rolls a dice in NdN format."""
+        if not MyCog.valid_steam_id(steam_id):
+            return Exception('Invalid steam ID!')
+
+        await ctx.send('{}: {} {} {}'.format(ctx.author.name, ctx.author.id, steam_id, email))
+
+    async def cog_command_error(self, ctx, error):
+        await ctx.send('\n{}\n{}'.format(
+            error,
+            ctx.command.help
+            ))
+
+    @staticmethod
+    def valid_email(email):
+        return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+
+    @staticmethod
+    def valid_steam_id(steam_id):
+        valid = SteamID(steam_id).is_valid()
+
+        user = SteamUser()
+
+        return valid
+
+
+class DiscordBot(Bot):
+    def __init__(self, token, *args, command_prefix='!', **kwargs):
+        Bot.__init__(self, command_prefix=command_prefix)
+
+        self.token = token
+
+        self.add_cog(MyCog(self))
+
+
+
+
+if __name__ == '__main__':
+    bot = DiscordBot(cfg.discord.bot_token)
+    i=0
+    while bot.loop:
+        print(i)
+        i+=1
+    #bot.run_forever()
     try:
-        rolls, limit = map(int, dice.split('d'))
-    except Exception:
-        await ctx.send('Format has to be in NdN!')
-        return
-
-    result = ', '.join(str(random.randint(1, limit)) for r in range(rolls))
-    await ctx.send(result)
-
-@bot.command(description='For when you wanna settle the score some other way')
-async def choose(ctx, *choices: str):
-    """Chooses between multiple choices."""
-    await ctx.send(random.choice(choices))
-
-@bot.command()
-async def repeat(ctx, times: int, content='repeating...'):
-    """Repeats a message multiple times."""
-    for i in range(times):
-        await ctx.send(content)
-
-@bot.command()
-async def joined(ctx, member: discord.Member):
-    """Says when a member joined."""
-    await ctx.send('{0.name} joined in {0.joined_at}'.format(member))
-
-@bot.group()
-async def cool(ctx):
-    """Says if a user is cool.
-
-    In reality this just checks if a subcommand is being invoked.
-    """
-    if ctx.invoked_subcommand is None:
-        await ctx.send('No, {0.subcommand_passed} is not cool'.format(ctx))
-
-@cool.command(name='bot')
-async def _bot(ctx):
-    """Is the bot cool?"""
-    await ctx.send('Yes, the bot is cool.')
-
-bot.run(os.environ['DISCORD_BOT_KEY'])
+        bot.loop.run_until_complete(bot.start(cfg.discord.bot_token))
+    except KeyboardInterrupt:
+        bot.loop.run_until_complete(bot.logout())
+        # cancel all tasks lingering
+    finally:
+        bot.loop.close()
+    #bot.run(cfg.discord.bot_token)
