@@ -1,10 +1,9 @@
-import gevent.monkey
-gevent.monkey.patch_all()
-
 import os
 import time
 import random
 from __init__ import *
+from enum import Enum
+
 
 from dota2.util import replay_url_from_match
 from steam.enums import EResult
@@ -19,6 +18,11 @@ from tqdm import tqdm
 
 import logging
 #logging.basicConfig(format='[%(asctime)s] %(levelname)s %(name)s: %(message)s', level=logging.DEBUG)
+
+class EGameType(Enum):
+    RD=0
+    CD=1
+    CM=2
 
 class BotCredentials:
     def __init__(self, uname, passwd):
@@ -39,15 +43,15 @@ class BotCredentials:
         return [BotCredentials(uname, pwd) for uname, pwd in results]
 
 class DotaBotCluster:
-    def __init__(self):
+    def __init__(self, wait_dota=True):
         self.bots = []
-        self._init_bots()
+        self._init_bots(wait_dota=wait_dota)
 
-    def _init_bots(self):
+    def _init_bots(self, wait_dota=True):
         bot_credentials = BotCredentials.fetch_all()
         print('Launching bots...')
         self.bots = [
-            DotaBotInstance(cred.uname, cred.passwd)
+            DotaBotInstance(cred.uname, cred.passwd, wait_dota=wait_dota)
             for cred in
             tqdm(bot_credentials)
         ]
