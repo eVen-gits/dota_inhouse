@@ -26,25 +26,44 @@ class CommunityCog(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
 
+        #self.bot.bg_tasks.append(self.bot.loop.create_task(self.vouching(freq=5)))
+
     @discord.ext.commands.dm_only()
     @command(
         name='register',
-        help='Signup with !register <your_steam_id> <your_email>'
+        help='Signup with !register <your_steam_id> <your_mail>'
     )
-    async def register(self, ctx, steam_id:int, email:str):
-        if not community.valid_email(email):
-            raise Exception('Invalid email!')
+    async def register(self, ctx, steam_id:int, mail:str):
+        e = None
+        if not community.valid_mail(mail):
+            e = Exception('Invalid mail!')
 
         if not community.valid_steam_id(steam_id):
-            return Exception('Invalid steam ID!')
+            e = Exception('Invalid steam ID!')
 
-        community.register_player(ctx.author.id, steam_id, email)
-        await ctx.send('{}: {} {} {}'.format(ctx.author.name, ctx.author.id, steam_id, email))
+        if not community.is_new_user(ctx.author.id, steam_id, mail):
+            e = Exception('User already registered, wait for vouching!')
 
-    async def cog_command_error(self, ctx, error):
-        await ctx.send('\n{}\n{}'.format(
-            error,
-            ctx.command.help
+        if e:
+            #self.cog_command_error(ctx, e, ommit_help=True)
+            raise e
+
+        community.register_player(ctx.author.id, steam_id, mail)
+        await ctx.send((
+            'Successful registration!\n'
+            'Wait for vouching process to complete.\n'
+            'Your information:\n'
+            '{}:'
+            '\n\tDiscord ID: {}'
+            '\n\tSteam ID: {}'
+            '\n\tEmail: {}'
+        ).format(ctx.author.name, ctx.author.id, steam_id, mail))
+
+    async def cog_command_error(self, ctx, error, ommit_help=False):
+        print(error)
+        await ctx.send('```ERROR:\n{}\n\nCommand info:\n{}```'.format(
+            error.original,
+            ctx.command.help if not ommit_help else ''
             ))
 
     @command(
@@ -54,6 +73,23 @@ class CommunityCog(Cog):
     async def lobby(self, ctx, mode:str):
         pass
 
+    @Cog.listener()
+    async def on_raw_reaction_add(self, payload):
+        print('Reaction!!!', payload)
+
+    '''
+    @on_reaction_add(reaction, user)
+    async def vouching(self, freq=5):
+        await self.bot.wait_until_ready()
+        vouch_channel = self.bot.get_channel(cfg.discord.channels.vouching)
+        while not self.bot.is_closed():
+            pending = community.User.fetch_pending()
+            print(pending)
+            for p in pending:
+                print(p)
+                await vouch_channel.send('Pending user {}'.format(p.discord_id))
+            await asyncio.sleep(freq)
+    '''
 class DiscordManagementCog(Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -75,26 +111,27 @@ class DiscordManagementCog(Cog):
         ))
 
 class DiscordBot(Bot):
-    def __init__(self, token, *args, command_prefix='!', freq=0.1, **kwargs):
+    def __init__(self, token, *args, command_prefix='!', freq=0.1, run_bots=True, **kwargs):
         Bot.__init__(self, command_prefix=command_prefix)
 
         self.token = token
 
+        self.bg_tasks = list()
+
         self.add_cog(CommunityCog(self))
         self.add_cog(DiscordManagementCog(self))
 
-        self.cluster = DotaBotCluster(wait_dota=False)
-
-        # create the background task and run it in the background
-        self.bg_task = self.loop.create_task(self.my_background_task(freq=freq))
-
-    async def my_background_task(self, freq=0.1):
+        if run_bots:
+            self.cluster = DotaBotCluster(wait_dota=False)
+            # create the background task and run it in the background
+            bg_tasks.append(self.loop.create_task(self.dota_bots_idle(freq=freq)))
+    
+    async def dota_bots_idle(self, freq=0.1):
         await self.wait_until_ready()
-        #self.cluster.run_forever(freq=0.1)
         while not self.is_closed():
             self.cluster.idle()
             await asyncio.sleep(freq)
 
 if __name__ == '__main__':
-    bot = DiscordBot(cfg.discord.bot_token, freq=0.1)
+    bot = DiscordBot(cfg.discord.bot_token, freq=0.1, run_bots=False)
     bot.run(cfg.discord.bot_token)
